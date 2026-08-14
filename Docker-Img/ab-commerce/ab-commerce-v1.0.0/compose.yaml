@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  app:
+    image: frostniost/abcommerce:1.0.1
+    container_name: abcommerce
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_MONGODB_URI: mongodb://mongo:27017/abcommerce?replicaSet=rs0
+      JAVA_OPTS: "-Xms512m -Xmx1024m"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - abcommerce-net
+
+  mongo:
+    image: mongo:8.2.9
+    container_name: abcommerce-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    command: mongod --replSet rs0 --bind_ip_all
+    volumes:
+      - mongo-data:/data/db
+      - mongo_config_data:/data/configdb
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          mongosh --quiet --eval '
+          const hello = db.hello();
+          if (!hello.setName) {
+            rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "mongo:27017" }] });
+            quit(1);
+          }
+          quit(hello.setName === "rs0" && hello.isWritablePrimary ? 0 : 1);
+          '
+      interval: 5s
+      timeout: 5s
+      retries: 60
+    networks:
+      - abcommerce-net
+
+volumes:
+  mongo_data:
+    name: abcommerce-mongo-data
+  mongo_config_data:
+    name: abcommerce-mongo-config-data
+
+networks:
+  abcommerce-net:
+    driver: bridge
