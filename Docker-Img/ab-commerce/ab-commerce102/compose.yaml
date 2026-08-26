@@ -1,0 +1,54 @@
+name: abcommerce
+
+services:
+  app:
+    image: frostniost/abcommerce:1.0.2
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_MONGODB_URI: mongodb://mongodb:27017/abcommerce?replicaSet=rs0
+      JHIPSTER_SECURITY_AUTHENTICATION_JWT_BASE64_SECRET: ${JWT_BASE64_SECRET}
+      _JAVA_OPTIONS: -Xms256m -Xmx512m
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080;
+          printf "GET /management/health HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3;
+          grep -q "\"status\":\"UP\"" <&3'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  mongodb:
+    image: mongo:latest
+    restart: unless-stopped
+    command: mongod --replSet rs0 --bind_ip_all
+    volumes:
+      - mongodb_data:/data/db
+      - mongo_config_data:/data/configdb
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet --eval '
+          const hello = db.hello();
+          if (!hello.setName) {
+            rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "mongodb:27017" }] });
+            quit(1);
+          }
+          quit(hello.setName === "rs0" && hello.isWritablePrimary ? 0 : 1);
+          '
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+volumes:
+  mongodb_data:
+  mongo_config_data:
+    name: abcommerce-mongo-config-data
