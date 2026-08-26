@@ -1,28 +1,23 @@
-version: "3.9"
+name: abcommerce
 
 services:
   app:
-    image: frostniost/abcommerce:1.0.1
-    container_name: abcommerce
+    image: frostniost/abcommerce:1.0.4
     restart: unless-stopped
+    environment:
+      _JAVA_OPTIONS: "-Xmx512m -Xms256m"
+      SPRING_PROFILES_ACTIVE: "dev,api-docs,webapp,secret-samples"
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
+      SPRING_MONGODB_URI: "mongodb://mongodb:27017/abcommerce?replicaSet=rs0"
     ports:
       - "8080:8080"
-    environment:
-      SPRING_PROFILES_ACTIVE: prod
-      SPRING_MONGODB_URI: mongodb://mongo:27017/abcommerce?replicaSet=rs0
-      JAVA_OPTS: "-Xms512m -Xmx1024m"
     depends_on:
-      mongo:
+      mongodb:
         condition: service_healthy
-    networks:
-      - abcommerce-net
 
-  mongo:
+  mongodb:
     image: mongo:8.2.9
-    container_name: abcommerce-mongo
     restart: unless-stopped
-    ports:
-      - "27017:27017"
     command: mongod --replSet rs0 --bind_ip_all
     volumes:
       - mongo_data:/data/db
@@ -34,7 +29,10 @@ services:
           mongosh --quiet --eval '
           const hello = db.hello();
           if (!hello.setName) {
-            rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "mongo:27017" }] });
+            rs.initiate({
+              _id: "rs0",
+              members: [{ _id: 0, host: "mongodb:27017" }]
+            });
             quit(1);
           }
           quit(hello.setName === "rs0" && hello.isWritablePrimary ? 0 : 1);
@@ -42,8 +40,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 60
-    networks:
-      - abcommerce-net
 
 volumes:
   mongo_data:
@@ -51,6 +47,3 @@ volumes:
   mongo_config_data:
     name: abcommerce-mongo-config-data
 
-networks:
-  abcommerce-net:
-    driver: bridge
