@@ -1,0 +1,47 @@
+name: abcommerce
+
+services:
+  app:
+    image: frostniost/abcommerce:1.0.9
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      _JAVA_OPTIONS: "-Xmx512m -Xms256m"
+      SPRING_PROFILES_ACTIVE: "dev,api-docs,webapp,secret-samples"
+      SPRING_DOCKER_COMPOSE_ENABLED: "false"
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
+      SPRING_MONGODB_URI: "mongodb://localhost:27017/abcommerce?replicaSet=rs0"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  mongodb:
+    image: mongo:8.2.9
+    network_mode: host
+    restart: unless-stopped
+    command: mongod --replSet rs0 --bind_ip_all
+    volumes:
+      - mongo_data:/data/db
+      - mongo_config_data:/data/configdb
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          mongosh --quiet --eval '
+          try {
+            var s = rs.status();
+            quit(s.ok === 1 && s.myState === 1 ? 0 : 1);
+          } catch (e) {
+            rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "localhost:27017" }] });
+            quit(1);
+          }
+          '
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+volumes:
+  mongo_data:
+    name: abcommerce-mongo-data
+  mongo_config_data:
+    name: abcommerce-mongo-config-data
